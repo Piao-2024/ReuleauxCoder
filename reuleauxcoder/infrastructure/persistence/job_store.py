@@ -87,12 +87,14 @@ def lease(path: Path, *, wait=False):
         locked = True
         yield
     finally:
-        if locked and os.name == "nt":
-            import msvcrt
+        try:
+            if locked and os.name == "nt":
+                import msvcrt
 
-            stream.seek(0)
-            msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-        stream.close()
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            stream.close()
 
 
 def is_locked(path: Path) -> bool:

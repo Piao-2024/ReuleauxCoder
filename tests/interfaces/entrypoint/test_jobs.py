@@ -191,6 +191,32 @@ def test_lease_preserves_file_and_releases_after_failure(tmp_path, initial):
     assert path.read_bytes() == expected
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows byte-range locks")
+def test_lease_closes_handle_when_windows_unlock_fails(tmp_path, monkeypatch):
+    import msvcrt
+
+    path = tmp_path / "run.lock"
+    real_locking = msvcrt.locking
+    error = OSError("unlock failed")
+
+    def fail_unlock(descriptor, mode, length):
+        if mode == msvcrt.LK_UNLCK:
+            raise error
+        return real_locking(descriptor, mode, length)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(msvcrt, "locking", fail_unlock)
+        with pytest.raises(OSError, match="unlock failed") as failure:
+            with lease(path):
+                assert is_locked(path)
+
+    # Retain the traceback: collection of the failed context must not be what
+    # closes its handle and releases the OS lock.
+    assert failure.value is error
+    with lease(path):
+        assert is_locked(path)
+
+
 def test_job_and_workspace_leases_prevent_duplicate_execution(tmp_path):
     store, job_id = make_job(tmp_path)
     called = []
