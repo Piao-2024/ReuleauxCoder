@@ -7,6 +7,7 @@
 - Handle macOS process-group termination races when an already-exited group reports a permission error, while preserving errors for live processes.
 - Fix a Windows race when concurrent unattended jobs initialize a lock file: acquire the byte-range lock without writing a placeholder first. Keep existing lock files compatible and preserve mutual exclusion and release after failures.
 - Always close unattended-job lock handles even when Windows reports an unlock error, so subsequent workers can acquire the lease without waiting for garbage collection.
+- Pre-provision the runtime's exact language-server package sets in CI and run LSP integration tests with npm offline, keeping dependency downloads outside initialization deadlines.
 
 ## 0.11.7 - 2026-10-07
 
