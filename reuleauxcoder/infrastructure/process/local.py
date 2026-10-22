@@ -926,6 +926,14 @@ class LocalProcessPort:
             os.killpg(process.pid, selected)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # Linux reports ESRCH for a vanished process group, while Darwin
+            # reports EPERM when the group has no deliverable members (for
+            # example, the leader exited between poll() and killpg()). Only
+            # suppress the error once the process is actually gone.
+            if entry.done.wait(0.1) or process.poll() is not None:
+                return
+            raise
 
     def release(self, session_id: str) -> None:
         entry = self._lookup(session_id)

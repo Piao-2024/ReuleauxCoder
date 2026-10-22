@@ -482,6 +482,34 @@ def test_failed_termination_is_reported_and_can_be_retried(
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal assertion")
+def test_termination_permission_error_from_vanished_group_is_ignored(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    # Darwin returns EPERM instead of ESRCH when the process group has no
+    # deliverable members (for example, the leader exits between poll() and
+    # killpg()). The error must not surface once the process is gone.
+    port = LocalProcessPort()
+    handle = port.start(
+        "trap '' TERM; while :; do sleep 1; done",
+        cwd=str(tmp_path),
+        runtime_timeout=30,
+    )
+    original_killpg = os.killpg
+
+    def vanish_during_signal(process_group: int, selected_signal: int) -> None:
+        original_killpg(process_group, signal.SIGKILL)
+        raise PermissionError("process group vanished")
+
+    monkeypatch.setattr(os, "killpg", vanish_during_signal)
+    port.terminate(handle.session_id, reason="test_cleanup")
+
+    entry = port._lookup(handle.session_id)
+    assert entry.done.wait(2)
+    port.shutdown(grace_seconds=0)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal assertion")
 def test_concurrent_termination_waits_for_delivery_confirmation(
     monkeypatch,
     tmp_path,

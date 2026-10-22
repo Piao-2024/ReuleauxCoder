@@ -68,9 +68,8 @@ def lease(path: Path, *, wait=False):
         if os.name == "nt":
             import msvcrt
 
-            if os.fstat(stream.fileno()).st_size == 0:
-                stream.write(b"0")
-                stream.flush()
+            # Windows permits locking beyond EOF. Writing a placeholder before
+            # acquiring the lock races with another handle that already owns it.
             stream.seek(0)
             try:
                 msvcrt.locking(

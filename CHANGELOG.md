@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix a Windows race when concurrent unattended jobs initialize a lock file: acquire the byte-range lock without writing a placeholder first. Keep existing lock files compatible and preserve mutual exclusion and release after failures.
+
 ## 0.11.7 - 2026-10-07
 
 - Add generic unattended `rcoder job` commands for launching plain task text in an explicit workspace, detached execution, durable status and results, event polling, pause/cancel/resume, and file-based answers and approvals. Startup instructions remain ordinary task input and do not require a collaboration-service adapter.

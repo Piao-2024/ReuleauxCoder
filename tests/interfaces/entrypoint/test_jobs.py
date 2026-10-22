@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 
 import pytest
@@ -158,11 +159,36 @@ def test_concurrent_creation_has_one_winner(tmp_path):
     workspace.mkdir()
     store = JobStore(tmp_path / "registry")
     spec = JobSpec(str(workspace), "Do the task")
+    ready = Barrier(8, timeout=10)
+
+    def create(_):
+        ready.wait()
+        return store.create(spec, "stable-key")
+
     with ThreadPoolExecutor(8) as executor:
-        results = list(
-            executor.map(lambda _: store.create(spec, "stable-key"), range(16))
-        )
+        results = list(executor.map(create, range(8)))
     assert sum(created for _, created in results) == 1
+
+
+@pytest.mark.parametrize("initial", [None, b"", b"0"], ids=["missing", "empty", "legacy"])
+def test_lease_preserves_file_and_releases_after_failure(tmp_path, initial):
+    path = tmp_path / "run.lock"
+    if initial is not None:
+        path.write_bytes(initial)
+    expected = initial or b""
+    with pytest.raises(ValueError, match="job failed"):
+        with lease(path):
+            # Empty locks must stay empty even while held. On Windows this also
+            # proves contention works for a byte range beyond the end of file.
+            assert path.stat().st_size == len(expected)
+            with pytest.raises(LeaseBusy):
+                with lease(path):
+                    pytest.fail("A second handle acquired the same lease")
+            raise ValueError("job failed")
+    assert path.read_bytes() == expected
+    with lease(path, wait=True):
+        assert path.stat().st_size == len(expected)
+    assert path.read_bytes() == expected
 
 
 def test_job_and_workspace_leases_prevent_duplicate_execution(tmp_path):
